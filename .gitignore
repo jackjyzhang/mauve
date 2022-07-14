@@ -1,3 +1,8 @@
+# custom
+*__pycache__
+gen_machine_text/backbone
+gen_machine_text/gen_*
+
 # pycharm
 .idea
 
