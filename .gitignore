@@ -1,7 +1,9 @@
 # custom
 *__pycache__
-gen_machine_text/backbone
-gen_machine_text/gen_*
+gen/backbone
+gen/gen_*
+feature_extraction/*
+data/*
 
 # pycharm
 .idea
