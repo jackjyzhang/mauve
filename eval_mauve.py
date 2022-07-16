@@ -35,6 +35,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--reference', type=str, required=True, help='reference for mauve, should be SAME LENGTH as generation')
     parser.add_argument('-g', '--generation', type=str, nargs='+', required=True)
+    parser.add_argument('-d', '--save_dir', type=str, default=None, help='save dir, default to dir of last generation file')
+    parser.add_argument('-s', '--output_suffix', type=str, default='', help='output name mauve_{suffix}.csv and div_{suffix}.png')
 
     return parser.parse_args()
 
@@ -48,6 +50,12 @@ if __name__ == '__main__':
 
     results = 'name,mauve\n'
     for gen_path in args.generation:
+        if not os.path.exists(gen_path):
+            print(f'WARNING: path {gen_path} does not exist, skipping...')
+            continue
+        if os.path.splitext(gen_path)[1] != '.txt':
+            print(f'WARNING: {gen_path} is not a text file, skipping...')
+            continue
         basename = os.path.splitext(os.path.basename(gen_path))[0]
         print(f'file basename: {basename}')
         gen = load_file_by_line(gen_path)
@@ -55,6 +63,10 @@ if __name__ == '__main__':
         results += f'{basename},{out.mauve}\n'
         plt.plot(out.divergence_curve[:, 1], out.divergence_curve[:, 0], label=basename)
 
+    save_dir = os.path.dirname(gen_path) if args.save_dir is None else args.save_dir # use directory of last generation file by default
     print(results)
+    if len(args.output_suffix) > 0: args.output_suffix = '_' + args.output_suffix
+    with open(os.path.join(save_dir, f'mauve{args.output_suffix}.csv'), 'w') as f:
+        print(results, file=f)
     plt.legend()
-    plt.savefig('div.png')
+    plt.savefig(os.path.join(save_dir, f'div{args.output_suffix}.png'))
