@@ -17,7 +17,7 @@ def load_file_by_line(path):
                 texts.append(line)
     return texts
 
-def eval_mauve(ref, gen):
+def eval_mauve(ref, gen, **kwargs):
     if ref is None:
         return -1
     gen = [text.replace('[BOS]', '').replace('<|endoftext|>', '') for text in gen] # get rid of BOS, EOS
@@ -27,7 +27,7 @@ def eval_mauve(ref, gen):
     if len(ref) > len(gen):
         print('MAUVE #reference > #generated, truncating reference to have length #generated')
         ref = ref[:len(gen)]
-    out = compute_mauve(p_text=ref, q_text=gen, device_id=0, max_text_length=512, verbose=False)
+    out = compute_mauve(p_text=ref, q_text=gen, device_id=0, max_text_length=512, verbose=False, **kwargs)
     print(f'MAUVE={out.mauve}')
     return out
 
@@ -37,8 +37,16 @@ def parse_args():
     parser.add_argument('-g', '--generation', type=str, nargs='+', required=True)
     parser.add_argument('-d', '--save_dir', type=str, default=None, help='save dir, default to dir of last generation file')
     parser.add_argument('-s', '--output_suffix', type=str, default='', help='output name mauve_{suffix}.csv and div_{suffix}.png')
+    parser.add_argument('-f', '--feature_extractor', type=str, default=None, help='feature extractor for mauve. default is gpt2-large')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.feature_extractor is not None and args.output_suffix == '':
+        print('Using non-default feature extractor, need to provide a --output_suffix!!')
+        raise AssertionError
+    if args.feature_extractor is None:
+        args.feature_extractor = 'gpt2-large'
+
+    return args
 
 if __name__ == '__main__':
     args = parse_args()
@@ -49,6 +57,7 @@ if __name__ == '__main__':
     plt.grid()
 
     results = 'name,mauve\n'
+    kwargs = {'featurize_model_name': args.feature_extractor}
     for gen_path in args.generation:
         if not os.path.exists(gen_path):
             print(f'WARNING: path {gen_path} does not exist, skipping...')
@@ -59,7 +68,7 @@ if __name__ == '__main__':
         basename = os.path.splitext(os.path.basename(gen_path))[0]
         print(f'file basename: {basename}')
         gen = load_file_by_line(gen_path)
-        out = eval_mauve(ref, gen)
+        out = eval_mauve(ref, gen, **kwargs)
         results += f'{basename},{out.mauve}\n'
         plt.plot(out.divergence_curve[:, 1], out.divergence_curve[:, 0], label=basename)
 
