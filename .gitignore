@@ -4,6 +4,8 @@ gen/backbone
 gen/gen_*
 feature_extraction/*
 data/*
+*.log
+*command_history.txt
 
 # pycharm
 .idea

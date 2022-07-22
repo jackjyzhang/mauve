@@ -14,7 +14,7 @@ def parse_args():
     parser.add_argument('--output', type=str, default=None)
     parser.add_argument('--is_finetuned', action='store_true', help='will change special tokens on model + tokenizer')
 
-    parser.add_argument('--topk', type=int, default=None, help='top k for sampling')
+    parser.add_argument('--topk', type=int, default=100000, help='top k for sampling') # override huggingface's default topk=50!
     parser.add_argument('--topp', type=float, default=None, help='top p for sampling')
     parser.add_argument('--temp', type=float, default=None, help='temperature for sampling')
     parser.add_argument('--num', type=int, default=10)
