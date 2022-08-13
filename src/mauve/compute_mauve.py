@@ -38,7 +38,7 @@ def compute_mauve(
         kmeans_num_redo=5, kmeans_max_iter=500,
         featurize_model_name='gpt2-large', device_id=-1, max_text_length=1024,
         divergence_curve_discretization_size=25, mauve_scaling_factor=5,
-        verbose=False, seed=25, batch_size=1, use_float64=False,
+        verbose=False, seed=25, batch_size=1, use_float64=False, use_pooler_output=False
 ):
 
     """
@@ -90,10 +90,12 @@ def compute_mauve(
     p_features = get_features_from_input(
         p_features, p_tokens, p_text, featurize_model_name, max_text_length,
         device_id, name="p", verbose=verbose, batch_size=batch_size, use_float64=use_float64,
+        use_pooler_output=use_pooler_output
     )
     q_features = get_features_from_input(
         q_features, q_tokens, q_text, featurize_model_name, max_text_length,
         device_id, name="q", verbose=verbose, batch_size=batch_size, use_float64=use_float64,
+        use_pooler_output=use_pooler_output
     )
     if num_buckets == 'auto':
         # heuristic: use num_clusters = num_generations / 10
@@ -117,7 +119,7 @@ def compute_mauve(
 
     # Divergence curve and mauve
     mixture_weights = np.linspace(1e-6, 1-1e-6, divergence_curve_discretization_size)
-    divergence_curve = get_divergence_curve_for_multinomials(p, q, mixture_weights, mauve_scaling_factor)
+    divergence_curve, ents = get_divergence_curve_for_multinomials(p, q, mixture_weights, mauve_scaling_factor)
     x, y = divergence_curve.T
     idxs1 = np.argsort(x)
     idxs2 = np.argsort(y)
@@ -131,12 +133,13 @@ def compute_mauve(
         mauve=mauve_score,
         frontier_integral=fi_score,
         num_buckets=num_buckets,
+        ents=ents
     )
     return to_return
 
 def get_features_from_input(features, tokenized_texts, texts,
                             featurize_model_name, max_len, device_id, name, batch_size,
-                            verbose=False, use_float64=False):
+                            verbose=False, use_float64=False, use_pooler_output=False):
     global MODEL, TOKENIZER, MODEL_NAME
     if features is None:
         # Featurizing is necessary. Make sure the required packages are available
@@ -176,7 +179,7 @@ def get_features_from_input(features, tokenized_texts, texts,
         if use_float64:
             MODEL = MODEL.double()
         if verbose: print('Featurizing tokens')
-        features = featurize_tokens_from_model(MODEL, tokenized_texts, batch_size, name).detach().cpu().numpy()
+        features = featurize_tokens_from_model(MODEL, tokenized_texts, batch_size, name, use_pooler_output=use_pooler_output).detach().cpu().numpy()
     else:
         features = np.asarray(features)
     return features
@@ -239,15 +242,33 @@ def kl_multinomial(p, q):
         idxs = np.logical_and(p != 0, q != 0)
         return np.sum(p[idxs] * np.log(p[idxs] / q[idxs]))
 
+def xent_and_ent(p, q):
+    '''
+    KL(P||Q) = H(P,Q) - H(P)
+
+    returns H(P,Q), H(P)
+    '''
+    assert p.shape == q.shape
+    if np.logical_and(p != 0, q == 0).any():
+        return np.inf, np.inf
+    else:
+        idxs = np.logical_and(p != 0, q != 0)
+        return -np.sum(p[idxs] * np.log(q[idxs])), -np.sum(p[idxs] * np.log(p[idxs]))
+
 
 def get_divergence_curve_for_multinomials(p, q, mixture_weights, scaling_factor):
     # TODO: check if extreme points are needed
     divergence_curve = [[0, np.inf]] # extreme point
-    for w in np.sort(mixture_weights):
+    for i, w in enumerate(np.sort(mixture_weights)):
         r = w * p + (1 - w) * q
         divergence_curve.append([kl_multinomial(q, r), kl_multinomial(p, r)])
+        if i == 0: # w is 1e-6, r is q, kl(p,r) ~ kl(p,q)
+            h_pq, h_p = xent_and_ent(p, r)
+        if i == len(mixture_weights) - 1: # w is 1-1e-6, r is p, kl(q,r) ~ kl(q,p)
+            h_qp, h_q = xent_and_ent(q, r)
+
     divergence_curve.append([np.inf, 0]) # other extreme point
-    return np.exp(-scaling_factor * np.asarray(divergence_curve))
+    return np.exp(-scaling_factor * np.asarray(divergence_curve)), (h_pq, h_p, h_qp, h_q)
 
 def get_fronter_integral(p, q, scaling_factor=2):
     total = 0.0

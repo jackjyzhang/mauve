@@ -84,7 +84,7 @@ def decode_samples_from_lst(tokenizer, tokenized_texts):
     return output
 
 @torch.no_grad()
-def featurize_tokens_from_model(model, tokenized_texts, batch_size, name="", verbose=False):
+def featurize_tokens_from_model(model, tokenized_texts, batch_size, name="", verbose=False, use_pooler_output=False):
     """Featurize tokenized texts using models, support batchify
     :param model: HF Transformers model
     :param batch_size: Batch size used during forward pass
@@ -117,8 +117,13 @@ def featurize_tokens_from_model(model, tokenized_texts, batch_size, name="", ver
                      output_hidden_states=True,
                      return_dict=True)
         h = []
-        for hidden_state, sent_length in zip(outs.hidden_states[-1], chunk_sent_length):
-            h.append(hidden_state[sent_length - 1])
+        if use_pooler_output:
+            # justification for using pooler_output: https://github.com/huggingface/transformers/issues/7540#issuecomment-704155218
+            for hidden_state, sent_length in zip(outs.pooler_output, chunk_sent_length):
+                h.append(hidden_state)
+        else:
+            for hidden_state, sent_length in zip(outs.hidden_states[-1], chunk_sent_length):
+                h.append(hidden_state[sent_length - 1])
         h = torch.stack(h, dim=0)
         feats.append(h.cpu())
     t2 = time.time()
