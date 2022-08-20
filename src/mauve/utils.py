@@ -111,11 +111,16 @@ def featurize_tokens_from_model(model, tokenized_texts, batch_size, name="", ver
             [torch.ones(sent_length).long() for sent_length in chunk_sent_length],
             batch_first=True,
             padding_value=0).to(device)
-        outs = model(input_ids=padded_chunk,
-                     attention_mask=attention_mask,
-                     past_key_values=None,
-                     output_hidden_states=True,
-                     return_dict=True)
+        try:
+            outs = model(input_ids=padded_chunk,
+                        attention_mask=attention_mask,
+                        past_key_values=None,
+                        output_hidden_states=True,
+                        return_dict=True)
+        except:
+            # __import__('pdb').set_trace()
+            print('WARNING: model forward failed... ignoring this chunk')
+            continue
         h = []
         if use_pooler_output:
             # justification for using pooler_output: https://github.com/huggingface/transformers/issues/7540#issuecomment-704155218
